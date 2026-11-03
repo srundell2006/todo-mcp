@@ -1,0 +1,93 @@
+# todo-mcp: remote MCP server for Microsoft To Do (personal account), for Claude.ai.
+#
+# Portainer repository stack "todo-mcp" on Ubuntugutility (endpoint 3), compose path
+# deploy/docker-compose.yml. The image builds from this repo's Dockerfile.
+#
+# Stack environment variables (Portainer only, never in this file or the repo):
+#   MS_CLIENT_ID          Application (client) ID of the Entra app "Todo MCP (homelab)".
+#                         Public client, no secret exists for it.
+#   AUTHENTIK_CLIENT_ID   client_id of the Authentik provider for app todo-mcp-claude; the
+#                         mcp-auth-gate only lets through tokens issued to it (aud check).
+# Neither is a secret, but the repo is public, so they stay out of it.
+#
+# Secrets: none in this file. The Microsoft refresh token and the ntfy password are created
+# at runtime inside the todo-mcp-data volume (dir 0700, files 0600) and never leave it. The
+# volume is deliberately not under /Docker, so the nightly TrueNAS backup doesn't copy the
+# refresh token; losing it only means signing in again.
+#
+# Edge: Traefik -> mcp-auth-gate forwardAuth (?aud=<AUTHENTIK_CLIENT_ID>). /.well-known/*
+# redirects to Authentik's OIDC discovery (priority 200); the RFC 9728 protected-resource
+# document comes from the shared mcp-oauth-metadata stack (priority 300).
+#
+# Pinned 172.30.0.98 on the traefik network per [[Traefik network - static address block]].
+# Compose eats single $, so the Traefik regex anchor is written $$.
+
+services:
+  todo-mcp:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: todo-mcp:local
+    # Built here, never in a registry: always build, and let "Re-pull image" skip it.
+    pull_policy: build
+    container_name: todo-mcp
+    hostname: todo-mcp
+    restart: unless-stopped
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - TZ=America/Chicago
+      - TODO_MCP_CLIENT_ID=${MS_CLIENT_ID:-}
+      - TODO_MCP_AUTHORITY=https://login.microsoftonline.com/consumers
+      - TODO_MCP_TIMEZONE=America/Chicago
+      - TODO_MCP_DATA_DIR=/data
+      - TODO_MCP_KEEPALIVE_HOURS=12
+      # Re-authentication alerts: ntfy on Miniserv (PlexNet 10.10.0.50), user todo-mcp,
+      # write-only on this topic. Its password is in the volume; ntfy only has the bcrypt hash.
+      - NTFY_URL=http://10.10.0.50
+      - NTFY_TOPIC=homelab-warning
+      - NTFY_USER=todo-mcp
+      - LOG_LEVEL=INFO
+    volumes:
+      - todo-mcp-data:/data
+    networks:
+      traefik:
+        ipv4_address: 172.30.0.98
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
+      - "traefik.http.services.todo-mcp.loadbalancer.server.port=3000"
+
+      # forwardAuth via mcp-auth-gate: 200 = Bearer token issued to todo-mcp-claude, 401 = blocked.
+      - "traefik.http.middlewares.authentik-todo-mcp.forwardauth.address=http://mcp-auth-gate:8080/verify?aud=${AUTHENTIK_CLIENT_ID:-unset}"
+      - "traefik.http.middlewares.authentik-todo-mcp.forwardauth.authRequestHeaders=Authorization"
+      - "traefik.http.middlewares.authentik-todo-mcp.forwardauth.trustForwardHeader=true"
+
+      # /.well-known/* -> Authentik OIDC discovery (priority 200, no auth)
+      - "traefik.http.middlewares.todo-mcp-wellknown.redirectregex.regex=^https://todo-mcp\\.gaytulsa\\.org/.well-known/.*$$"
+      - "traefik.http.middlewares.todo-mcp-wellknown.redirectregex.replacement=https://authentik.gaytulsa.org/application/o/todo-mcp-claude/.well-known/openid-configuration"
+      - "traefik.http.middlewares.todo-mcp-wellknown.redirectregex.permanent=false"
+      - "traefik.http.routers.todo-mcp-wellknown.rule=Host(`todo-mcp.gaytulsa.org`) && PathPrefix(`/.well-known/`)"
+      - "traefik.http.routers.todo-mcp-wellknown.service=todo-mcp"
+      - "traefik.http.routers.todo-mcp-wellknown.middlewares=todo-mcp-wellknown"
+      - "traefik.http.routers.todo-mcp-wellknown.priority=200"
+
+      # Main authenticated route
+      - "traefik.http.routers.todo-mcp.rule=Host(`todo-mcp.gaytulsa.org`)"
+      - "traefik.http.routers.todo-mcp.service=todo-mcp"
+      - "traefik.http.routers.todo-mcp.middlewares=authentik-todo-mcp"
+
+volumes:
+  todo-mcp-data:
+    name: todo-mcp-data
+
+networks:
+  traefik:
+    external: true
