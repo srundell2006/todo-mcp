@@ -69,6 +69,7 @@ services:
       - "traefik.http.middlewares.authentik-todo-mcp.forwardauth.address=http://mcp-auth-gate:8080/verify?aud=${AUTHENTIK_CLIENT_ID:-unset}"
       - "traefik.http.middlewares.authentik-todo-mcp.forwardauth.authRequestHeaders=Authorization"
       - "traefik.http.middlewares.authentik-todo-mcp.forwardauth.trustForwardHeader=true"
+      - "traefik.http.middlewares.authentik-todo-mcp.forwardauth.maxResponseBodySize=65536"
 
       # /.well-known/* -> Authentik OIDC discovery (priority 200, no auth)
       - "traefik.http.middlewares.todo-mcp-wellknown.redirectregex.regex=^https://todo-mcp\\.gaytulsa\\.org/.well-known/.*$$"
