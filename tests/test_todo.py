@@ -165,6 +165,17 @@ async def test_update_complete_reopen_delete(todo, fake):
     assert gone["deleted_task"] == "Fix the fence" and tid not in fake.tasks[lst["id"]]
 
 
+async def test_completing_a_repeating_task_explains_the_series(todo, fake):
+    lst = fake.add_list("Home")
+    tid = (await todo.create_task("Home", "Bins out", due_date="2026-11-04",
+                                  recurrence=RecurrenceSpec(frequency="weekly")))["created"]["id"]
+    done = await todo.set_status("Home", tid, "completed")
+    assert done["task"]["status"] == "notStarted" and done["series_next_due"] == "2026-11-11"
+    assert "separate completed task" in done["note"] and "2026-11-04" in done["note"]
+    statuses = sorted((t["status"], t["dueDateTime"]["dateTime"][:10]) for t in fake.tasks[lst["id"]].values())
+    assert statuses == [("completed", "2026-11-04"), ("notStarted", "2026-11-11")]
+
+
 async def test_checklist_items(todo, fake):
     fake.add_list("Home")
     tid = (await todo.create_task("Home", "Pack"))["created"]["id"]

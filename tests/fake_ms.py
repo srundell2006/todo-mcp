@@ -177,6 +177,18 @@ class FakeMicrosoft:
         if tid not in tasks:
             return self._json(404, {"error": {"code": "ErrorItemNotFound", "message": "task not found"}})
         if not cl_part:
+            if method == "PATCH" and body.get("status") == "completed" and tasks[tid].get("recurrence"):
+                # Like To Do: the completed occurrence becomes a separate completed task and the
+                # series (same ID) moves on to its next occurrence (weekly here: +7 days).
+                from datetime import datetime, timedelta
+                cur = tasks[tid]
+                copy = {k: v for k, v in cur.items() if k not in ("id", "recurrence", "status")}
+                self.add_task(lid, **copy, status="completed",
+                              completedDateTime={"dateTime": "2026-11-03T16:00:00.0000000", "timeZone": "UTC"})
+                due = datetime.fromisoformat(cur["dueDateTime"]["dateTime"][:19]) + timedelta(days=7)
+                cur["dueDateTime"] = {"dateTime": due.strftime("%Y-%m-%dT%H:%M:%S.0000000"),
+                                      "timeZone": cur["dueDateTime"]["timeZone"]}
+                return self._json(200, cur)
             if method == "PATCH":
                 for k, v in body.items():
                     if v is None:

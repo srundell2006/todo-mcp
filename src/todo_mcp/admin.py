@@ -3,6 +3,7 @@
     todo-mcp-admin status          sign-in state (no tokens shown)
     todo-mcp-admin login [--wait]  start the Microsoft device-code sign-in; prints the link and code
     todo-mcp-admin reset --yes     forget the token cache and the linked account
+    todo-mcp-admin refresh         renew the Microsoft token now (proves renewal works)
     todo-mcp-admin ntfy-hash       bcrypt hash of the ntfy password, for `ntfy user add`
     todo-mcp-admin notify-test     send a test alert to the ntfy topic
 """
@@ -36,6 +37,7 @@ def main(argv: list[str] | None = None) -> int:
     login.add_argument("--wait", action="store_true", help="wait until sign-in finishes")
     reset = sub.add_parser("reset")
     reset.add_argument("--yes", action="store_true")
+    sub.add_parser("refresh")
     sub.add_parser("ntfy-hash")
     sub.add_parser("notify-test")
     args = parser.parse_args(argv)
@@ -49,6 +51,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "status":
             _print(client.get(_admin_url(config, "/status")).json())
             return 0
+        if args.cmd == "refresh":
+            resp = client.post(_admin_url(config, "/refresh"))
+            _print(resp.json())
+            return 0 if resp.status_code == 200 else 1
         if args.cmd == "notify-test":
             _print(client.post(_admin_url(config, "/notify-test")).json())
             return 0

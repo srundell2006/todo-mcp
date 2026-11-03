@@ -21,7 +21,13 @@ Microsoft account**, using delegated permissions only.
 
 Tasks support title, notes, due date, reminder, importance, recurrence (daily, weekdays,
 weekly, monthly or yearly, by date or "second Tuesday" style, with an end date or count) and
-categories. ⚠️ tools start their description with `DESTRUCTIVE:` and carry
+categories.
+
+Repeating tasks behave as To Do series. Completing one stores that occurrence as a separate
+completed task and moves the same task ID to the next occurrence. Moving a repeating task's
+due date off its pattern can split it off as a one-off task. The tools say when either happens.
+
+⚠️ tools start their description with `DESTRUCTIVE:` and carry
 `destructiveHint: true`, so Claude asks before calling them.
 
 ## Microsoft auth
@@ -70,6 +76,7 @@ Run these inside the container (`docker exec todo-mcp ...`):
 todo-mcp-admin status          # sign-in state, account, last refresh (no tokens)
 todo-mcp-admin login [--wait]  # start device-code sign-in; prints the link and code
 todo-mcp-admin reset --yes     # forget the token cache and linked account
+todo-mcp-admin refresh         # renew the Microsoft token now
 todo-mcp-admin ntfy-hash       # bcrypt hash of the generated ntfy password
 todo-mcp-admin notify-test     # send a test alert
 ```

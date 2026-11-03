@@ -483,8 +483,17 @@ class TodoService:
         if not patch:
             raise TodoError("Nothing to change: give at least one field to update.")
         raw = await self.graph.request("PATCH", self._tasks_path(lst["id"], task_id), json=patch)
-        out: dict[str, Any] = {"updated": self.format_task(self._after_patch(current, patch, raw), lst),
-                               "changed": sorted(patch)}
+        updated = self.format_task(self._after_patch(current, patch, raw), lst)
+        repeating = (current.get("recurrence") and not clear_recurrence) or recurrence is not None
+        if new_due and repeating and updated["due_date"] != new_due.isoformat():
+            # To Do keeps a series on its pattern. Moving the current occurrence to an
+            # off-pattern date splits it off as a one-off task with the requested date.
+            notes_out.append(
+                f"This task repeats ({updated['recurrence']['summary'] if updated['recurrence'] else 'series'}). "
+                f"To Do kept the series on its pattern (next due {updated['due_date']}) and may have split this "
+                f"occurrence off as a separate one-off task due {new_due.isoformat()}. Check with list_tasks."
+            )
+        out: dict[str, Any] = {"updated": updated, "changed": sorted(patch)}
         if notes_out:
             out["notes"] = notes_out
         return out
@@ -503,10 +512,17 @@ class TodoService:
         current = await self._get_raw(lst, task_id)
         patch = {"status": status}
         raw = await self.graph.request("PATCH", self._tasks_path(lst["id"], task_id), json=patch)
-        out: dict[str, Any] = {"task": self.format_task(self._after_patch(current, patch, raw), lst),
-                               "previous_status": current.get("status")}
-        if status == "completed" and current.get("recurrence"):
-            out["note"] = "This task repeats; To Do adds the next occurrence as a new task."
+        task = self.format_task(self._after_patch(current, patch, raw), lst)
+        out: dict[str, Any] = {"task": task, "previous_status": current.get("status")}
+        if status == "completed" and current.get("recurrence") and task["status"] != "completed":
+            was_due = tu.parse_graph_due_date(current.get("dueDateTime"), self.tz)
+            out["note"] = (
+                "This task repeats. To Do saved this occurrence"
+                f"{f' (due {was_due.isoformat()})' if was_due else ''} as a separate completed task, and this "
+                f"task ID now holds the series, moved to its next occurrence (due {task['due_date']}). "
+                "To undo, reopen the completed copy (list_tasks with status 'completed')."
+            )
+            out["series_next_due"] = task["due_date"]
         return out
 
     async def delete_task(self, list_ref: str, task_id: str) -> dict:

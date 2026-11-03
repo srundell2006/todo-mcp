@@ -223,7 +223,8 @@ def build_mcp(app: App) -> MCPServer:
 
     @mcp.tool(annotations=IDEMPOTENT_WRITE)
     async def complete_task(list_name: ListName, task_id: TaskId) -> dict[str, Any]:
-        """Mark a task completed. For a repeating task, To Do adds the next occurrence."""
+        """Mark a task completed. For a repeating task, To Do stores the completed occurrence as a
+        separate completed task and moves this task (same ID) to the next occurrence; the result says so."""
         return await _run(todo.set_status(list_name, task_id, "completed"))
 
     @mcp.tool(annotations=IDEMPOTENT_WRITE)
@@ -310,11 +311,19 @@ def build_admin_app(app: App) -> Starlette:
     async def notify_test(_: Request) -> JSONResponse:
         return JSONResponse({"sent": await app.notifier.test(), "enabled": app.notifier.enabled})
 
+    async def refresh(_: Request) -> JSONResponse:
+        try:
+            await app.auth.refresh(force=True)
+        except AuthError as exc:
+            return JSONResponse({"error": str(exc), **app.auth.status()}, status_code=400)
+        return JSONResponse(app.auth.status())
+
     return Starlette(routes=[
         Route("/status", status, methods=["GET"]),
         Route("/login", login, methods=["POST"]),
         Route("/reset", reset, methods=["POST"]),
         Route("/notify-test", notify_test, methods=["POST"]),
+        Route("/refresh", refresh, methods=["POST"]),
     ])
 
 
