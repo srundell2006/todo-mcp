@@ -100,12 +100,23 @@ async def test_list_tasks_filters_across_lists(todo, fake):
     assert [t["title"] for t in (await todo.list_tasks(importance="high"))["tasks"]] == ["today"]
     done = await todo.list_tasks(status="completed")
     assert [t["title"] for t in done["tasks"]] == ["done"]
-    assert done["tasks"][0]["completed_at"] == "2026-11-02T12:00-06:00"
+    assert done["tasks"][0]["completed_on"] == "2026-11-02"
     assert len((await todo.list_tasks("A", status="all"))["tasks"]) == 3
     limited = await todo.list_tasks(limit=2)
     assert limited["returned"] == 2 and limited["truncated"] and limited["total_matched"] == 5
     # Server-side status filter is used, and pages are followed (page size 2).
     assert any("%24filter=status+ne" in str(r.url) or "$filter=status ne" in str(r.url) for r in fake.requests)
+
+
+async def test_completion_date_as_to_do_stores_it(todo, fake):
+    a = fake.add_list("A")
+    # The To Do app stores completion as midnight UTC; other clients as local midnight.
+    fake.add_task(a["id"], title="app", status="completed",
+                  completedDateTime={"dateTime": "2026-11-03T00:00:00.0000000", "timeZone": "UTC"})
+    fake.add_task(a["id"], title="local", status="completed",
+                  completedDateTime={"dateTime": "2026-11-03T06:00:00.0000000", "timeZone": "UTC"})
+    done = await todo.list_tasks("A", status="completed")
+    assert {t["title"]: t["completed_on"] for t in done["tasks"]} == {"app": "2026-11-03", "local": "2026-11-03"}
 
 
 async def test_status_filter_falls_back_when_graph_rejects_it(todo, fake):
@@ -157,9 +168,9 @@ async def test_update_complete_reopen_delete(todo, fake):
         await todo.update_task("Home", tid, due_date="today", clear_due_date=True)
 
     done = await todo.set_status("Home", tid, "completed")
-    assert done["task"]["status"] == "completed" and done["task"]["completed_at"]
+    assert done["task"]["status"] == "completed" and done["task"]["completed_on"]
     reopened = await todo.set_status("Home", tid, "notStarted")
-    assert reopened["task"]["status"] == "notStarted" and reopened["task"]["completed_at"] is None
+    assert reopened["task"]["status"] == "notStarted" and reopened["task"]["completed_on"] is None
     assert reopened["previous_status"] == "completed"
     gone = await todo.delete_task("Home", tid)
     assert gone["deleted_task"] == "Fix the fence" and tid not in fake.tasks[lst["id"]]

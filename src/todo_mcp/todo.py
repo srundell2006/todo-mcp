@@ -81,7 +81,8 @@ class TodoService:
         due = tu.parse_graph_due_date(raw.get("dueDateTime"), self.tz)
         status = raw.get("status")
         reminder = tu.parse_graph_datetime(raw.get("reminderDateTime"), self.tz)
-        completed = tu.parse_graph_datetime(raw.get("completedDateTime"), self.tz)
+        # To Do stores the completion as a date (usually midnight UTC), like due dates.
+        completed = tu.parse_graph_due_date(raw.get("completedDateTime"), self.tz)
         recurrence = raw.get("recurrence")
         out: dict[str, Any] = {
             "id": raw.get("id"),
@@ -100,7 +101,7 @@ class TodoService:
             ),
             "categories": raw.get("categories") or [],
             "notes": _plain_text(raw.get("body")),
-            "completed_at": tu.iso_local(completed) if status == "completed" else None,
+            "completed_on": completed.isoformat() if completed and status == "completed" else None,
             "created": tu.iso_local(tu.parse_offset_timestamp(raw.get("createdDateTime"), self.tz)),
             "modified": tu.iso_local(tu.parse_offset_timestamp(raw.get("lastModifiedDateTime"), self.tz)),
         }
@@ -284,7 +285,7 @@ class TodoService:
                     continue
                 matched.append(t)
         if status == "completed":
-            matched.sort(key=lambda t: t.get("completed_at") or "", reverse=True)
+            matched.sort(key=lambda t: t.get("completed_on") or "", reverse=True)
         else:
             matched.sort(key=self._sort_key)
         limit = max(1, min(int(limit), 500))
