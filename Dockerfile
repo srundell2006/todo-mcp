@@ -8,6 +8,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
+# Pick up Debian security fixes newer than the base image.
+RUN apt-get update && apt-get -y upgrade && rm -rf /var/lib/apt/lists/*
+
 RUN groupadd --gid 10001 app \
  && useradd --uid 10001 --gid 10001 --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin app \
  && mkdir -p /data \
@@ -16,7 +19,7 @@ RUN groupadd --gid 10001 app \
 
 WORKDIR /app
 COPY requirements.txt ./
-RUN pip install -r requirements.txt
+RUN pip install --upgrade pip && pip install -r requirements.txt
 COPY pyproject.toml README.md ./
 COPY src ./src
 RUN pip install --no-deps . && rm -rf /app/src /app/build
