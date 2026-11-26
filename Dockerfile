@@ -9,6 +9,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 # Pick up Debian security fixes newer than the base image.
+# Change OS_REFRESH to rebuild this layer instead of reusing the cached one.
+ARG OS_REFRESH=2026-11-26
 RUN apt-get update && apt-get -y upgrade && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd --gid 10001 app \
